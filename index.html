@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zee Info Tamizh</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+
+<style>
+body { margin:0; font-family:Arial; background:#0f172a; color:white; }
+header { background:#1e293b; text-align:center; padding:20px; }
+header img { width:80px; border-radius:10px; }
+
+.container { max-width:900px; margin:auto; padding:20px; }
+
+.card { background:#1e293b; padding:15px; margin:15px 0; border-radius:10px; }
+
+input, textarea, select {
+  width:100%; padding:10px; margin:5px 0;
+  border:none; border-radius:5px;
+}
+
+button {
+  padding:10px;
+  background:#38bdf8;
+  border:none;
+  border-radius:5px;
+  cursor:pointer;
+}
+
+button:disabled {
+  background:gray;
+  cursor:not-allowed;
+}
+
+img { width:100%; border-radius:10px; margin-top:10px; }
+</style>
+</head>
+
+<body>
+
+<header>
+<img src="https://gcedmvdulfyiazlqcobp.supabase.co/storage/v1/object/public/images/klhohoi.jpg">
+<h1>Zee Info Tamizh ⚡</h1>
+</header>
+
+<div class="container">
+
+<div class="card" id="authBox">
+<h2>Sign Up / Login</h2>
+
+<input id="email" type="email" placeholder="Email">
+<input id="password" type="password" placeholder="Password">
+
+<button onclick="signUp()">Sign Up</button>
+<button onclick="login()">Login</button>
+<button onclick="logout()">Logout</button>
+
+<p id="status"></p>
+</div>
+
+<div class="card" id="adminPanel" style="display:none;">
+<h2>Admin Dashboard</h2>
+
+<input id="title" placeholder="Title">
+<textarea id="content" placeholder="Content"></textarea>
+
+<select id="category">
+<option>News</option>
+<option>Facts</option>
+<option>Thoughts</option>
+</select>
+
+<input type="file" id="imageFile">
+
+<button id="publishBtn" onclick="addPost()">Publish</button>
+<p id="publishStatus"></p>
+
+</div>
+
+<div id="posts"></div>
+
+</div>
+
+<script>
+const supabase = window.supabase.createClient(
+"https://gcedmvdulfyiazlqcobp.supabase.co",
+"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+);
+
+const ADMIN_EMAIL = "zahracadir2005@gmail.com";
+let user = null;
+
+// ---------- AUTH ----------
+async function signUp(){
+  const { error } = await supabase.auth.signUp({
+    email: email.value,
+    password: password.value
+  });
+  status(error ? "❌ "+error.message : "✅ Signed up");
+}
+
+async function login(){
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.value,
+    password: password.value
+  });
+
+  if(error) return status("❌ "+error.message);
+
+  user = data.user;
+  status("✅ Logged in");
+  checkUser();
+}
+
+async function logout(){
+  await supabase.auth.signOut();
+  user=null;
+  status("Logged out");
+  checkUser();
+}
+
+// ---------- CHECK ----------
+async function checkUser(){
+  const { data } = await supabase.auth.getUser();
+  user = data.user;
+
+  authBox.style.display = user ? "none":"block";
+  adminPanel.style.display = user && user.email===ADMIN_EMAIL ? "block":"none";
+
+  if(user) loadPosts();
+}
+
+// ---------- ADD POST ----------
+async function addPost(){
+  publishBtn.disabled = true;
+  publishStatus.innerText = "Publishing...";
+
+  try{
+    let imageUrl=null;
+    const file=imageFile.files[0];
+
+    if(file){
+      const fileName=Date.now()+"_"+file.name;
+
+      const { error } = await supabase.storage
+      .from("images")
+      .upload(fileName,file);
+
+      if(error) throw error;
+
+      imageUrl = "https://gcedmvdulfyiazlqcobp.supabase.co/storage/v1/object/public/images/"+fileName;
+    }
+
+    const { error } = await supabase.from("posts").insert([{
+      title:title.value || "No Title",
+      content:content.value || "",
+      category:category.value,
+      image:imageUrl
+    }]);
+
+    if(error) throw error;
+
+    publishStatus.innerText = "✅ Successfully published!";
+    clearInputs();
+    loadPosts();
+
+  }catch(err){
+    console.log(err);
+    publishStatus.innerText = "❌ Failed: "+err.message;
+  }
+
+  publishBtn.disabled = false;
+}
+
+// ---------- LOAD POSTS ----------
+async function loadPosts(){
+  const { data, error } = await supabase
+  .from("posts")
+  .select("*")
+  .order("created_at",{ascending:false});
+
+  if(error){
+    console.log(error);
+    return;
+  }
+
+  posts.innerHTML="";
+
+  data.forEach(p=>{
+    posts.innerHTML+=`
+    <div class="card">
+      <h2>${p.title}</h2>
+      <p>${p.category}</p>
+      ${p.image ? `<img src="${p.image}">`:""}
+      <p>${p.content}</p>
+    </div>`;
+  });
+}
+
+// ---------- HELPERS ----------
+function status(msg){ status.innerText=msg; }
+
+function clearInputs(){
+  title.value="";
+  content.value="";
+  imageFile.value="";
+}
+
+// ---------- INIT ----------
+checkUser();
+</script>
+
+</body>
+</html>
