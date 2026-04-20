@@ -13,7 +13,6 @@ header { background:#1e293b; text-align:center; padding:20px; }
 header img { width:80px; border-radius:10px; }
 
 .container { max-width:900px; margin:auto; padding:20px; }
-
 .card { background:#1e293b; padding:15px; margin:15px 0; border-radius:10px; }
 
 input, textarea, select {
@@ -27,11 +26,6 @@ button {
   border:none;
   border-radius:5px;
   cursor:pointer;
-}
-
-button:disabled {
-  background:gray;
-  cursor:not-allowed;
 }
 
 img { width:100%; border-radius:10px; margin-top:10px; }
@@ -48,20 +42,19 @@ img { width:100%; border-radius:10px; margin-top:10px; }
 <div class="container">
 
 <div class="card" id="authBox">
-<h2>Sign Up / Login</h2>
+<h2 id="authTitle">Sign Up</h2>
 
 <input id="email" type="email" placeholder="Email">
 <input id="password" type="password" placeholder="Password">
 
-<button onclick="signUp()">Sign Up</button>
-<button onclick="login()">Login</button>
+<button id="authBtn" onclick="handleAuth()">Sign Up</button>
 <button onclick="logout()">Logout</button>
 
-<p id="status"></p>
+<p id="statusText"></p>
 </div>
 
 <div class="card" id="adminPanel" style="display:none;">
-<h2>Admin Dashboard</h2>
+<h2>Admin Dashboard 👑</h2>
 
 <input id="title" placeholder="Title">
 <textarea id="content" placeholder="Content"></textarea>
@@ -74,9 +67,8 @@ img { width:100%; border-radius:10px; margin-top:10px; }
 
 <input type="file" id="imageFile">
 
-<button id="publishBtn" onclick="addPost()">Publish</button>
+<button onclick="addPost()">Publish</button>
 <p id="publishStatus"></p>
-
 </div>
 
 <div id="posts"></div>
@@ -92,120 +84,144 @@ const supabase = window.supabase.createClient(
 const ADMIN_EMAIL = "zahracadir2005@gmail.com";
 let user = null;
 
-// ---------- AUTH ----------
-async function signUp(){
-  const { error } = await supabase.auth.signUp({
-    email: email.value,
-    password: password.value
-  });
-  status(error ? "❌ "+error.message : "✅ Signed up");
+// ---------- AUTO SWITCH SIGNUP/LOGIN ----------
+document.getElementById("email").addEventListener("input", () => {
+  const email = document.getElementById("email").value;
+
+  if (email === ADMIN_EMAIL) {
+    authTitle.innerText = "Admin Login";
+    authBtn.innerText = "Login";
+  } else {
+    authTitle.innerText = "Sign Up";
+    authBtn.innerText = "Sign Up";
+  }
+});
+
+// ---------- AUTH HANDLER ----------
+async function handleAuth() {
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+
+  if (!email || !password) {
+    return setStatus("❌ Enter email & password");
+  }
+
+  if (email === ADMIN_EMAIL) {
+    // ADMIN LOGIN
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email, password
+    });
+
+    if (error) return setStatus("❌ " + error.message);
+
+    user = data.user;
+    setStatus("✅ Admin logged in");
+    checkUser();
+
+  } else {
+    // USER SIGNUP
+    const { error } = await supabase.auth.signUp({
+      email, password
+    });
+
+    if (error) return setStatus("❌ " + error.message);
+
+    // Auto login after signup
+    await supabase.auth.signInWithPassword({ email, password });
+
+    setStatus("✅ Signed up & logged in");
+    checkUser();
+  }
 }
 
-async function login(){
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: email.value,
-    password: password.value
-  });
-
-  if(error) return status("❌ "+error.message);
-
-  user = data.user;
-  status("✅ Logged in");
-  checkUser();
-}
-
-async function logout(){
+// ---------- LOGOUT ----------
+async function logout() {
   await supabase.auth.signOut();
-  user=null;
-  status("Logged out");
+  user = null;
+  setStatus("Logged out");
   checkUser();
 }
 
-// ---------- CHECK ----------
-async function checkUser(){
+// ---------- CHECK USER ----------
+async function checkUser() {
   const { data } = await supabase.auth.getUser();
   user = data.user;
 
-  authBox.style.display = user ? "none":"block";
-  adminPanel.style.display = user && user.email===ADMIN_EMAIL ? "block":"none";
+  authBox.style.display = user ? "none" : "block";
+  adminPanel.style.display = user && user.email === ADMIN_EMAIL ? "block" : "none";
 
-  if(user) loadPosts();
+  if (user) loadPosts();
 }
 
 // ---------- ADD POST ----------
-async function addPost(){
-  publishBtn.disabled = true;
+async function addPost() {
   publishStatus.innerText = "Publishing...";
 
-  try{
-    let imageUrl=null;
-    const file=imageFile.files[0];
+  try {
+    let imageUrl = null;
+    const file = document.getElementById("imageFile").files[0];
 
-    if(file){
-      const fileName=Date.now()+"_"+file.name;
+    if (file) {
+      const fileName = Date.now() + "_" + file.name;
 
       const { error } = await supabase.storage
-      .from("images")
-      .upload(fileName,file);
+        .from("images")
+        .upload(fileName, file);
 
-      if(error) throw error;
+      if (error) throw error;
 
-      imageUrl = "https://gcedmvdulfyiazlqcobp.supabase.co/storage/v1/object/public/images/"+fileName;
+      imageUrl = "https://gcedmvdulfyiazlqcobp.supabase.co/storage/v1/object/public/images/" + fileName;
     }
 
     const { error } = await supabase.from("posts").insert([{
-      title:title.value || "No Title",
-      content:content.value || "",
-      category:category.value,
-      image:imageUrl
+      title: title.value || "No Title",
+      content: content.value || "",
+      category: category.value,
+      image: imageUrl
     }]);
 
-    if(error) throw error;
+    if (error) throw error;
 
     publishStatus.innerText = "✅ Successfully published!";
     clearInputs();
     loadPosts();
 
-  }catch(err){
+  } catch (err) {
     console.log(err);
-    publishStatus.innerText = "❌ Failed: "+err.message;
+    publishStatus.innerText = "❌ " + err.message;
   }
-
-  publishBtn.disabled = false;
 }
 
 // ---------- LOAD POSTS ----------
-async function loadPosts(){
-  const { data, error } = await supabase
-  .from("posts")
-  .select("*")
-  .order("created_at",{ascending:false});
+async function loadPosts() {
+  const { data } = await supabase
+    .from("posts")
+    .select("*")
+    .order("created_at", { ascending: false });
 
-  if(error){
-    console.log(error);
-    return;
-  }
+  posts.innerHTML = "";
 
-  posts.innerHTML="";
-
-  data.forEach(p=>{
-    posts.innerHTML+=`
-    <div class="card">
-      <h2>${p.title}</h2>
-      <p>${p.category}</p>
-      ${p.image ? `<img src="${p.image}">`:""}
-      <p>${p.content}</p>
-    </div>`;
+  data.forEach(p => {
+    posts.innerHTML += `
+      <div class="card">
+        <h2>${p.title}</h2>
+        <p>${p.category}</p>
+        ${p.image ? `<img src="${p.image}">` : ""}
+        <p>${p.content}</p>
+      </div>
+    `;
   });
 }
 
 // ---------- HELPERS ----------
-function status(msg){ status.innerText=msg; }
+function setStatus(msg) {
+  document.getElementById("statusText").innerText = msg;
+}
 
-function clearInputs(){
-  title.value="";
-  content.value="";
-  imageFile.value="";
+function clearInputs() {
+  title.value = "";
+  content.value = "";
+  imageFile.value = "";
 }
 
 // ---------- INIT ----------
